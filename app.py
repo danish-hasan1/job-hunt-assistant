@@ -8,15 +8,167 @@ from datetime import datetime, date
 st.set_page_config(page_title="Job Hunt Assistant", page_icon="🎯", layout="wide") 
  
 st.markdown("""<style> 
-[data-testid="stAppViewContainer"]{background-color:#0f0f23} 
-[data-testid="stSidebar"]{background-color:#1a1a2e} 
-[data-testid="stSidebar"] *{color:white!important} 
-[data-testid="stHeader"]{background-color:#0f0f23!important} 
-.metric-card{background:#16213e;border:1px solid #0f3460;border-radius:10px;padding:20px;text-align:center} 
-.metric-value{font-size:2.5em;font-weight:bold;color:#e94560} 
-.metric-label{font-size:0.9em;color:#aaa;margin-top:5px} 
-.stButton>button{background-color:#e94560!important;color:white!important;border:none;border-radius:8px;font-weight:bold;width:100%} 
-h1,h2,h3,p,label{color:white!important} 
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap');
+
+/* Base Styles & Animated Background */
+html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif !important; }
+
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(-45deg, #09090e, #130f24, #0d1b2a, #110517);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+    color: #f0f0f5;
+}
+
+@keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Sidebar Styling */
+[data-testid="stSidebar"] {
+    background: rgba(10, 5, 20, 0.4) !important;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 5px 0 30px rgba(0,0,0,0.5);
+}
+[data-testid="stSidebar"] * { color: #e0e0ea !important; }
+[data-testid="stSidebarNav"] { padding-top: 2rem; }
+
+/* Header / Top Nav */
+[data-testid="stHeader"] { background-color: transparent !important; }
+
+/* Metric Cards with Glowing Border Effect */
+.metric-card {
+    position: relative;
+    background: rgba(20, 20, 35, 0.4);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    padding: 24px;
+    text-align: center;
+    box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    overflow: hidden;
+    animation: fadeUp 0.8s ease-out forwards;
+}
+
+.metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%; width: 50%; height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
+    transform: skewX(-20deg);
+    transition: 0.5s;
+}
+.metric-card:hover::before { left: 150%; }
+
+.metric-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    border-color: rgba(0, 255, 204, 0.4);
+    box-shadow: 0 15px 50px -10px rgba(0, 255, 204, 0.2);
+}
+
+.metric-value {
+    font-size: 3.5em;
+    font-weight: 700;
+    background: linear-gradient(135deg, #00FFCC 0%, #00BFFF 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
+}
+
+.metric-label {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-top: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+/* Animations */
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Buttons */
+.stButton>button {
+    background: linear-gradient(45deg, #FF3366, #FF9933) !important;
+    background-size: 200% auto !important;
+    color: white !important;
+    border: none;
+    border-radius: 14px;
+    font-weight: 700;
+    padding: 0.8rem 1.5rem;
+    font-size: 1.1em;
+    letter-spacing: 1px;
+    transition: all 0.4s ease;
+    box-shadow: 0 8px 25px rgba(255, 51, 102, 0.3);
+    text-transform: uppercase;
+    width: 100%;
+}
+
+.stButton>button:hover {
+    background-position: right center !important;
+    transform: translateY(-3px) scale(1.01);
+    box-shadow: 0 12px 30px rgba(255, 51, 102, 0.5);
+}
+
+.stButton>button:active { transform: translateY(1px); }
+
+/* Expanders */
+[data-testid="stExpander"] {
+    background: rgba(30, 30, 50, 0.3) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    transition: all 0.3s ease;
+    margin-bottom: 1rem;
+}
+[data-testid="stExpander"]:hover {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+[data-testid="stExpander"] summary {
+    padding: 1rem !important;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+/* Typography */
+h1 {
+    font-size: 3rem !important;
+    font-weight: 700 !important;
+    background: linear-gradient(to right, #ffffff, #a5b4fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -1px;
+    margin-bottom: 20px !important;
+}
+
+h2, h3 { font-weight: 600 !important; color: #e2e8f0 !important; letter-spacing: -0.5px; }
+p, label { color: #cbd5e1 !important; line-height: 1.6; }
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+/* DataFrame Styling */
+[data-testid="stDataFrame"] {
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(20, 20, 35, 0.4);
+}
+hr { border-color: rgba(255, 255, 255, 0.05) !important; margin: 2rem 0 !important; }
 </style>""", unsafe_allow_html=True) 
  
 init_db() 
@@ -196,6 +348,52 @@ elif page == "💼 Jobs":
                                 st.warning(f"ℹ️ {message}") 
 
                 st.markdown("---") 
+                st.markdown("---") 
+                st.markdown("**📧 Email Application**") 
+                e1, e2 = st.columns(2) 
+                with e1: 
+                    if st.button("🔍 Find Email", key=f"femail_{job['id']}"): 
+                        from engines.email_engine import extract_email_from_jd, find_company_email 
+                        from groq import Groq 
+                        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY")) 
+                        email = extract_email_from_jd(job['description']) 
+                        if not email: 
+                            with st.spinner("Searching for company email..."): 
+                                email = find_company_email(job['company'], groq_client) 
+                        if email: 
+                            st.session_state[f"email_{job['id']}"] = email 
+                            st.success(f"📧 Found: {email}") 
+                        else: 
+                            st.session_state[f"email_{job['id']}"] = "" 
+                            st.warning("No email found — enter manually") 
+ 
+                if f"email_{job['id']}" in st.session_state: 
+                    to_email = st.text_input("Recipient email:", value=st.session_state[f"email_{job['id']}"], key=f"emailinput_{job['id']}") 
+                    if st.button("📧 Send Application", key=f"sendemail_{job['id']}"): 
+                        safe_company = job['company'].replace(' ','_')[:30] 
+                        safe_role = job['title'].replace(' ','_')[:25] 
+                        folder = f"applications/{safe_company}_{safe_role}_{date.today().strftime('%d%b%Y')}" 
+                        cv_files = [f for f in os.listdir(folder) if f.endswith('.pdf') and 'CV_' in f] if os.path.exists(folder) else [] 
+                        cl_files = [f for f in os.listdir(folder) if f.endswith('.pdf') and 'Cover' in f] if os.path.exists(folder) else [] 
+                        if not cv_files: 
+                            st.warning("⚠️ Generate CV first!") 
+                        else: 
+                            cv_path = f"{folder}/{cv_files[0]}" 
+                            cl_path = f"{folder}/{cl_files[0]}" if cl_files else None 
+                            from engines.email_engine import send_application_email, build_email_subject, build_email_body 
+                            from engines.gemini_engine import generate_cover_letter 
+                            profile = json.load(open('profile.json')) 
+                            with st.spinner("Sending email..."): 
+                                cl_text = generate_cover_letter(job['company'], job['title'], job['description'], profile) 
+                                subject = build_email_subject(job, profile) 
+                                body = build_email_body(job, profile, cl_text) 
+                                success, message = send_application_email(to_email, subject, body, cv_path, cl_path) 
+                                if success: 
+                                    update_job_status(job['id'], 'applied') 
+                                    st.success(f"✅ Application sent to {to_email}!") 
+                                else: 
+                                    st.error(f"❌ {message}") 
+ 
                 st.markdown("**🤝 LinkedIn Outreach**") 
                 st.caption("Find a warm human contact and send a tailored connection request.") 
                 c_a, c_b = st.columns(2) 

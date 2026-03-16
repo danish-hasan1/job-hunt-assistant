@@ -5,25 +5,42 @@
   "location": "Bhopal, India",
   "relocate": true,
   "notice_period": "4 weeks",
-  "current_title": "Associate Director – Operations, Delivery & Account Management",
+  "current_title": "Associate Director \u2013 Operations, Delivery & Account Management",
   "current_company": "Next-Link Group",
   "years_experience": 13,
-  "current_portfolio": "€5M annual portfolio, 135 consultants, Europe/APAC/LATAM",
+  "current_portfolio": "\u20ac5M annual portfolio, 135 consultants, Europe/APAC/LATAM",
   "target_roles": [
-    "Associate Director – Talent Acquisition",
+    "Associate Director \u2013 Talent Acquisition",
     "Head of Talent Acquisition",
     "VP Talent",
     "RPO Delivery Director",
-    "Senior Manager – Recruitment Operations",
-    "Account Director – RPO/MSP",
+    "Senior Manager \u2013 Recruitment Operations",
+    "Account Director \u2013 RPO/MSP",
     "Global Delivery Manager"
   ],
-  "target_markets": ["Spain", "Belgium", "France", "Netherlands", "UK", "Germany", "Pan-Europe"],
+  "target_markets": [
+    "Spain",
+    "Belgium",
+    "France",
+    "Netherlands",
+    "UK",
+    "Germany",
+    "Pan-Europe"
+  ],
   "india_eu_roles": true,
-  "experience_markets": ["Europe", "India", "Middle East", "APAC", "LATAM"],
+  "experience_markets": [
+    "Europe",
+    "India",
+    "Middle East",
+    "APAC",
+    "LATAM"
+  ],
   "min_salary_inr": 0,
   "min_salary_eur": 0,
-  "languages": ["English", "Spanish (A2 - beginner)"],
+  "languages": [
+    "English",
+    "Spanish (A2 - beginner)"
+  ],
   "skills": [
     "RPO / MSP / LSP operating models",
     "Business unit P&L ownership",
@@ -41,50 +58,64 @@
     "Demand-aligned hiring strategy",
     "End to end recruitment"
   ],
-  "ats_tools": ["Workday", "Greenhouse", "Taleo", "SuccessFactors"],
+  "ats_tools": [
+    "Workday",
+    "Greenhouse",
+    "Taleo",
+    "SuccessFactors"
+  ],
   "key_achievements": [
-    "€5M annual portfolio with 135 active consultants",
+    "\u20ac5M annual portfolio with 135 active consultants",
     "100% client retention across entire portfolio",
     "125% increase in recruiter productivity via AI process redesign",
     "93% offer-to-join ratio",
     "Shortlist acceptance improved from 78% to 89%",
-    "250+ hires for Boehringer Ingelheim post-RFP win",
-    "250 CV submissions in 10 days for Novartis at 85% acceptance",
-    "5x Best Manager Award at NextLink",
+    "250+ hires for a global pharmaceutical client post-RFP win",
+    "250 CV submissions in 10 days for a leading life sciences client at 85% acceptance",
+    "5x Best Manager Award",
     "Upgraded accounts from Tier-3 to Tier-1 partnerships"
   ],
   "education": [
-    "MBA – HR & Banking, 2024",
-    "BE – Mechanical Engineering, 2012"
+    "MBA \u2013 HR & Banking, 2024",
+    "BE \u2013 Mechanical Engineering, 2012"
   ],
   "certifications": [
     "Generative AI in Recruitment",
     "Apply Generative AI for Effective Recruiting & Hiring",
-    "Leadership & Strategic Management – University of Illinois (Ongoing)",
+    "Leadership & Strategic Management \u2013 University of Illinois (Ongoing)",
     "Six Sigma",
     "POSH Certified"
   ],
   "tech_projects": [
-    "Recruiter's Diary – AI recruitment workflow hub",
-    "EBES – Employee Best Effort Score framework",
-    "Automator – AI recruitment automation toolkit"
+    "Recruiter's Diary \u2013 AI recruitment workflow hub",
+    "EBES \u2013 Employee Best Effort Score framework",
+    "Automator \u2013 AI recruitment automation toolkit"
   ],
-  "cv_summary": "Business Operations leader with 13+ years of experience managing revenue-generating talent service units within global RPO/MSP/LSP environments. Currently accountable for a €5M annual portfolio comprising 135 deployed consultants across Europe, APAC, and LATAM. Operate as business unit head with responsibility across margin governance (€120–€280/day range), SLA performance (90–93%), workforce forecasting, billing alignment, client governance, and matrix team leadership (20+). Recognised for maintaining 100% client retention while improving productivity (+125%) and protecting revenue exposure in a zero-bench deployment model.",
+  "cv_summary": "Business Operations leader with 13+ years of experience managing revenue-generating talent service units within global RPO/MSP/LSP environments. Currently accountable for a \u20ac5M annual portfolio comprising 135 deployed consultants across Europe, APAC, and LATAM. Operate as business unit head with responsibility across margin governance (\u20ac120\u2013\u20ac280/day range), SLA performance (90\u201393%), workforce forecasting, billing alignment, client governance, and matrix team leadership (20+). Recognised for maintaining 100% client retention while improving productivity (+125%) and protecting revenue exposure in a zero-bench deployment model.",
   "tracks": {
     "A": {
       "description": "India-based roles recruiting for European clients or managing RPO/MSP delivery",
       "keywords": [
-        "European recruitment", "EMEA delivery", "RPO delivery manager",
-        "MSP operations", "global talent delivery", "Europe talent acquisition",
-        "EMEA account management", "RPO operations India"
+        "European recruitment",
+        "EMEA delivery",
+        "RPO delivery manager",
+        "MSP operations",
+        "global talent delivery",
+        "Europe talent acquisition",
+        "EMEA account management",
+        "RPO operations India"
       ]
     },
     "B": {
-      "description": "Direct relocation to Europe — RPO/MSP leadership, AD/VP/Head of Talent",
+      "description": "Direct relocation to Europe \u2014 RPO/MSP leadership, AD/VP/Head of Talent",
       "keywords": [
-        "Associate Director Talent", "Head of Talent Acquisition",
-        "RPO Director Europe", "VP Talent", "Recruitment Operations Director",
-        "Account Director RPO", "Global Delivery Director"
+        "Associate Director Talent",
+        "Head of Talent Acquisition",
+        "RPO Director Europe",
+        "VP Talent",
+        "Recruitment Operations Director",
+        "Account Director RPO",
+        "Global Delivery Director"
       ]
     }
   }

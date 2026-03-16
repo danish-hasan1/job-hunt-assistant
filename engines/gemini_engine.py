@@ -21,6 +21,37 @@ def load_cv_notes():
         return {}
 
 
+def remove_client_names(text):
+    import re
+    client_names = [
+        "Boehringer Ingelheim",
+        "Novartis",
+        "Pfizer",
+        "AstraZeneca",
+        "Roche",
+        "Sanofi",
+        "Bayer",
+        "GSK",
+        "GlaxoSmithKline",
+        "Johnson & Johnson",
+        "Merck",
+        "Abbott",
+        "Amgen",
+        "Gilead",
+    ]
+    replacements = {
+        "pharmaceutical": "a global pharmaceutical client",
+        "life sciences": "a leading life sciences client",
+        "biotech": "a leading biotech client",
+        "tech": "a leading technology client",
+        "default": "a global enterprise client",
+    }
+    for name in client_names:
+        if name.lower() in text.lower():
+            text = re.sub(re.escape(name), "a global pharmaceutical client", text, flags=re.IGNORECASE)
+    return text
+
+
 def score_job(job_description, profile):
     cv_notes = load_cv_notes()
     search_keywords = cv_notes.get("job_search_strategy", {}).get("search_keywords", [])
@@ -105,10 +136,11 @@ CURRENT SUMMARY:
 JOB DESCRIPTION:
 {job_description[:1500]}
 
-Rules:
+ Rules:
 - 4-5 sentences only
 - Mirror keywords from JD naturally
-- Include at least one metric (€5M portfolio, 135 consultants, 100% retention)
+- Include metrics like €5M portfolio, 135 consultants, 100% retention but NEVER mention specific client company names. Say 'a global pharmaceutical client' not 'Boehringer Ingelheim'. Say 'a leading tech client' not the company name.
+- NEVER mention specific client company names. Use 'a global pharmaceutical client', 'a leading life sciences client', 'a Fortune 500 client' instead.
 - End with confident relocation/availability statement
 - No phrases like results-driven or passionate about
 - Return ONLY the paragraph, nothing else"""
@@ -120,7 +152,7 @@ Rules:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.4,
             )
-            return response.choices[0].message.content.strip()
+            return remove_client_names(response.choices[0].message.content.strip())
         except Exception as e:
             return f"Groq tailoring error: {str(e)}"
     try:
@@ -142,15 +174,16 @@ CURRENT PORTFOLIO: {profile.get('current_portfolio')}
 JOB DESCRIPTION:
 {job_description[:1500]}
 
-Write exactly 3 paragraphs:
+ Write exactly 3 paragraphs:
 1. Why this company and role — reference something specific
 2. Why the candidate fits — use real metrics and European/global experience
 3. Relocation commitment and confident close
 
-Rules:
+ Rules:
 - No "I am writing to apply" openings
 - No generic phrases
 - Professional but warm tone
+- NEVER mention specific client company names. Use 'a global pharmaceutical client', 'a leading life sciences client', 'a Fortune 500 client' instead.
 - Return only the letter text"""
 
     if groq_client:
@@ -160,7 +193,7 @@ Rules:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.4,
             )
-            return response.choices[0].message.content.strip()
+            return remove_client_names(response.choices[0].message.content.strip())
         except Exception as e:
             return f"Groq cover letter error: {str(e)}"
     try:

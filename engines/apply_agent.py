@@ -1,7 +1,20 @@
-
 import os, time, subprocess
 from datetime import date
 from playwright.sync_api import sync_playwright
+import json as _json
+
+
+def get_browser_with_session(p):
+    import json as _json
+    browser = p.webkit.launch(headless=False, slow_mo=400)
+    context = browser.new_context()
+    try:
+        cookies = _json.load(open("linkedin_cookies.json"))
+        context.add_cookies(cookies)
+    except:
+        pass
+    page = context.new_page()
+    return browser, context, page
 
 
 def apply_linkedin_semi_auto(job, cv_path, profile):
@@ -12,18 +25,10 @@ def apply_linkedin_semi_auto(job, cv_path, profile):
         job_url = job_url.split("?", 1)[0]
     print(f"Opening: {job['title']} at {job['company']}")
     with sync_playwright() as p:
-        browser = p.firefox.launch(headless=False, slow_mo=400)
-        context = browser.new_context(viewport={"width": 1280, "height": 800})
-        page = context.new_page()
+        browser, context, page = get_browser_with_session(p)
         try:
             page.goto(job_url, wait_until="networkidle", timeout=30000)
             time.sleep(2)
-            if "login" in page.url or "authwall" in page.url:
-                page.goto("https://www.linkedin.com/login", wait_until="networkidle", timeout=30000)
-                print("Please log in to LinkedIn in the browser...")
-                page.wait_for_url("**/feed/**", timeout=60000)
-                page.goto(job_url, wait_until="networkidle", timeout=30000)
-                time.sleep(2)
             easy_apply_btn = None
             for sel in [
                 "button[aria-label*='Easy Apply']",

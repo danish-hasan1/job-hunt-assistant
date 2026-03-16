@@ -55,6 +55,23 @@ REJECT_KEYWORDS = [
 ]
 
 
+def get_full_jd(job_url):
+    try:
+        r = requests.get(job_url, headers=HEADERS, timeout=15)
+        if r.status_code != 200:
+            return ""
+        soup = BeautifulSoup(r.text, "html.parser")
+        desc = soup.find("div", class_="jobs-description__content")
+        if not desc:
+            desc = soup.find("div", class_="show-more-less-html__markup")
+        if not desc:
+            return ""
+        text = desc.get_text(" ", strip=True)
+        return text[:3000]
+    except Exception:
+        return ""
+
+
 def scrape_jobs(keyword, location, track):
     jobs = []
     for start in [0, 25]:
@@ -93,6 +110,8 @@ def scrape_jobs(keyword, location, track):
                     if not any(k in title_lower for k in SENIOR_KEYWORDS):
                         continue
 
+                    full_desc = get_full_jd(link) if link else ""
+
                     desc_lower = (title + company).lower()
                     sponsorship = (
                         "possible"
@@ -111,7 +130,7 @@ def scrape_jobs(keyword, location, track):
                             "track": track,
                             "source": "linkedin",
                             "url": link,
-                            "description": f"{title} at {company} in {loc}. Role: {keyword} search. Location target: {location}.",
+                            "description": full_desc if full_desc else f"{title} at {company} in {loc}. Search: {keyword}",
                             "salary": "Not disclosed",
                             "sponsorship": sponsorship,
                             "date_found": date.today().isoformat(),
