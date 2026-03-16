@@ -1,0 +1,91 @@
+{
+  "name": "Syed Danish Hasan",
+  "email": "dhasan111@gmail.com",
+  "phone": "+91 998 107 3077",
+  "location": "Bhopal, India",
+  "relocate": true,
+  "notice_period": "4 weeks",
+  "current_title": "Associate Director – Operations, Delivery & Account Management",
+  "current_company": "Next-Link Group",
+  "years_experience": 13,
+  "current_portfolio": "€5M annual portfolio, 135 consultants, Europe/APAC/LATAM",
+  "target_roles": [
+    "Associate Director – Talent Acquisition",
+    "Head of Talent Acquisition",
+    "VP Talent",
+    "RPO Delivery Director",
+    "Senior Manager – Recruitment Operations",
+    "Account Director – RPO/MSP",
+    "Global Delivery Manager"
+  ],
+  "target_markets": ["Spain", "Belgium", "France", "Netherlands", "UK", "Germany", "Pan-Europe"],
+  "india_eu_roles": true,
+  "experience_markets": ["Europe", "India", "Middle East", "APAC", "LATAM"],
+  "min_salary_inr": 0,
+  "min_salary_eur": 0,
+  "languages": ["English", "Spanish (A2 - beginner)"],
+  "skills": [
+    "RPO / MSP / LSP operating models",
+    "Business unit P&L ownership",
+    "Revenue and margin governance",
+    "SLA and contract compliance",
+    "Workforce forecasting and capacity planning",
+    "Client executive engagement and QBR leadership",
+    "Matrix team leadership (20+ people)",
+    "Billing governance and commercial alignment",
+    "AI-enabled process optimisation",
+    "Boolean search",
+    "Stakeholder management",
+    "KPI governance and coaching frameworks",
+    "Recruiter performance management",
+    "Demand-aligned hiring strategy",
+    "End to end recruitment"
+  ],
+  "ats_tools": ["Workday", "Greenhouse", "Taleo", "SuccessFactors"],
+  "key_achievements": [
+    "€5M annual portfolio with 135 active consultants",
+    "100% client retention across entire portfolio",
+    "125% increase in recruiter productivity via AI process redesign",
+    "93% offer-to-join ratio",
+    "Shortlist acceptance improved from 78% to 89%",
+    "250+ hires for Boehringer Ingelheim post-RFP win",
+    "250 CV submissions in 10 days for Novartis at 85% acceptance",
+    "5x Best Manager Award at NextLink",
+    "Upgraded accounts from Tier-3 to Tier-1 partnerships"
+  ],
+  "education": [
+    "MBA – HR & Banking, 2024",
+    "BE – Mechanical Engineering, 2012"
+  ],
+  "certifications": [
+    "Generative AI in Recruitment",
+    "Apply Generative AI for Effective Recruiting & Hiring",
+    "Leadership & Strategic Management – University of Illinois (Ongoing)",
+    "Six Sigma",
+    "POSH Certified"
+  ],
+  "tech_projects": [
+    "Recruiter's Diary – AI recruitment workflow hub",
+    "EBES – Employee Best Effort Score framework",
+    "Automator – AI recruitment automation toolkit"
+  ],
+  "cv_summary": "Business Operations leader with 13+ years of experience managing revenue-generating talent service units within global RPO/MSP/LSP environments. Currently accountable for a €5M annual portfolio comprising 135 deployed consultants across Europe, APAC, and LATAM. Operate as business unit head with responsibility across margin governance (€120–€280/day range), SLA performance (90–93%), workforce forecasting, billing alignment, client governance, and matrix team leadership (20+). Recognised for maintaining 100% client retention while improving productivity (+125%) and protecting revenue exposure in a zero-bench deployment model.",
+  "tracks": {
+    "A": {
+      "description": "India-based roles recruiting for European clients or managing RPO/MSP delivery",
+      "keywords": [
+        "European recruitment", "EMEA delivery", "RPO delivery manager",
+        "MSP operations", "global talent delivery", "Europe talent acquisition",
+        "EMEA account management", "RPO operations India"
+      ]
+    },
+    "B": {
+      "description": "Direct relocation to Europe — RPO/MSP leadership, AD/VP/Head of Talent",
+      "keywords": [
+        "Associate Director Talent", "Head of Talent Acquisition",
+        "RPO Director Europe", "VP Talent", "Recruitment Operations Director",
+        "Account Director RPO", "Global Delivery Director"
+      ]
+    }
+  }
+}

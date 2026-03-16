@@ -1,0 +1,9 @@
+streamlit
+google-genai
+beautifulsoup4
+playwright
+python-docx
+reportlab
+requests
+python-dotenv
+pandas

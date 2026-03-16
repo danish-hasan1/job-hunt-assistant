@@ -1,0 +1,11 @@
+Company: mum
+Role: Executive Director
+Location: London Area, United Kingdom
+Source: linkedin
+URL: https://uk.linkedin.com/jobs/view/executive-director-at-mum-4373410604
+Date: 2026-03-15
+Score: 95
+Score Reason: The candidate's experience in RPO/MSP operating models, business unit P&L ownership, and matrix team leadership aligns well with the Executive Director role at mum in London
+
+FULL JOB DESCRIPTION:
+Executive Director at mum in London Area, United Kingdom. Keyword search: RPO director
