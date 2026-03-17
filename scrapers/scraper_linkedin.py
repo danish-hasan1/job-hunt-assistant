@@ -162,6 +162,57 @@ def scrape_linkedin():
     return total
 
 
+def scrape_linkedin_custom(role=None, location=None, track="both", seniority_filters=None, extra_keywords=None, max_results=50):
+    init_db()
+    total = 0
+    
+    # Build search queries from inputs
+    searches = []
+    base_role = role or "talent acquisition manager"
+    base_location = location or "Europe"
+    track_val = "A" if track == "A" else "B" if track == "B" else "A"
+    
+    # Add seniority variations
+    if seniority_filters:
+        for level in seniority_filters[:3]:
+            searches.append((f"{level} {base_role}", base_location, track_val))
+    else:
+        searches.append((base_role, base_location, track_val))
+    
+    # Add extra keyword searches
+    if extra_keywords:
+        for kw in extra_keywords[:2]:
+            searches.append((f"{base_role} {kw}", base_location, track_val))
+    
+    # If both tracks requested
+    if track == "both":
+        extra = []
+        for s in searches:
+            extra.append((s[0], "India", "A"))
+        searches.extend(extra)
+    
+    print(f"Running {len(searches)} custom searches...")
+    for keyword, loc, tr in searches:
+        print(f"  Searching: {keyword} in {loc}")
+        jobs = scrape_jobs(keyword, loc, tr)
+        for job in jobs[: max_results // len(searches)]:
+            insert_job(job)
+            total += 1
+            print(f"  + [{tr}] {job['title']} | {job['company']}")
+        time.sleep(3)
+    
+    print(f"Total saved: {total}")
+    # Also search Google Jobs
+    try:
+        from scrapers.scraper_google_jobs import scrape_google_jobs
+        g_count = scrape_google_jobs(base_role, base_location, track_val, max_results=20)
+        total += g_count
+        print(f"Google Jobs added: {g_count}")
+    except Exception as e:
+        print(f"Google Jobs error: {e}")
+    return total
+
+
 if __name__ == "__main__":
     print("Starting LinkedIn scraper...")
     scrape_linkedin()

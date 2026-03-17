@@ -20,7 +20,7 @@ def get_browser_with_session(p):
 
 def find_company_contact(company_name):
     contacts = []
-    query = f"{company_name} talent acquisition recruitment HR director"
+    query = f"\"{company_name}\" talent acquisition recruitment HR"
     
     with sync_playwright() as p:
         browser, context, page = get_browser_with_session(p)
@@ -43,6 +43,9 @@ def find_company_contact(company_name):
                     text = link.inner_text(timeout=2000).strip()
                     lines = [l.strip() for l in text.split('\n') if l.strip() and len(l.strip()) > 2]
                     if not lines:
+                        continue
+                    company_lower = (company_name or "").lower()
+                    if not any(company_lower in l.lower() for l in lines):
                         continue
                     name = lines[0]
                     for badge in ['• 1st','• 2nd','• 3rd','· 1st','· 2nd','· 3rd']:
@@ -140,6 +143,67 @@ def save_outreach(job_id, company, name, role, url, message):
     conn.execute("INSERT INTO outreach (job_id,company,contact_name,contact_role,contact_url,message,date_sent) VALUES (?,?,?,?,?,?,?)", (job_id,company,name,role,url,message,date.today().isoformat()))
     conn.commit()
     conn.close()
+
+def find_hiring_managers(company_name, role_hint):
+    contacts = []
+    if not company_name:
+        return contacts
+    query = f"\"{company_name}\" \"{role_hint}\" manager head director lead"
+    with sync_playwright() as p:
+        browser, context, page = get_browser_with_session(p)
+        try:
+            url = f"https://www.linkedin.com/search/results/people/?keywords={query.replace(' ','%20')}"
+            page.goto(url, timeout=20000)
+            _time.sleep(6)
+            seen = set()
+            links = page.locator('a[href*=\"/in/\"]').all()
+            print(f'Hiring manager search: {len(links)} profile links')
+            for link in links[:40]:
+                try:
+                    href = link.get_attribute('href', timeout=2000)
+                    if not href or '/in/' not in href:
+                        continue
+                    clean_url = href.split('?')[0]
+                    if clean_url in seen:
+                        continue
+                    text = link.inner_text(timeout=2000).strip()
+                    lines = [l.strip() for l in text.split('\n') if l.strip()]
+                    if not lines:
+                        continue
+                    headline = lines[1] if len(lines) > 1 else ""
+                    title_lower = headline.lower()
+                    keywords = ['manager', 'head', 'director', 'lead', 'vp', 'vice president']
+                    if not any(k in title_lower for k in keywords):
+                        continue
+                    company_lower = company_name.lower()
+                    if not any(company_lower in l.lower() for l in lines):
+                        continue
+                    seen.add(clean_url)
+                    name = lines[0]
+                    for badge in ['• 1st','• 2nd','• 3rd','· 1st','· 2nd','· 3rd']:
+                        name = name.replace(badge,'').strip()
+                    if len(name) < 3 or len(name) > 60:
+                        continue
+                    contacts.append(
+                        {
+                            'company': company_name,
+                            'contact_name': name,
+                            'contact_title': headline[:120],
+                            'linkedin_url': clean_url,
+                            'source_role': role_hint,
+                        }
+                    )
+                    print(f'  + HM {name} | {headline}')
+                    if len(contacts) >= 10:
+                        break
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f'Hiring manager search error: {e}')
+        finally:
+            _time.sleep(2)
+            browser.close()
+    return contacts
 
 if __name__ == "__main__":
     print("Outreach agent ready ✓")

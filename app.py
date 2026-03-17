@@ -2,182 +2,495 @@ import streamlit as st
 import pandas as pd 
 import json 
 import os 
-from engines.database import init_db, get_all_jobs, get_stats, update_job_status, update_job_score 
+from engines.database import init_db, get_all_jobs, get_stats, update_job_status, update_job_score, insert_hiring_targets, get_hiring_targets_by_status, update_hiring_target_status, update_hiring_target_message_flag 
 from datetime import datetime, date 
  
 st.set_page_config(page_title="Job Hunt Assistant", page_icon="🎯", layout="wide") 
- 
-st.markdown("""<style> 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap');
 
-/* Base Styles & Animated Background */
-html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif !important; }
+
+def render_job_body(job):
+    status_emoji = {'new': '🔵', 'approved': '🟢', 'rejected': '🔴', 'applied': '✅', 'interview': '🎤'}.get(job['status'], '🔵')
+    if job['score'] >= 80:
+        match_label = "🔥 High match"
+    elif job['score'] >= 60:
+        match_label = "👍 Good match"
+    elif job['score'] > 0:
+        match_label = "👌 Light match"
+    else:
+        match_label = "No score yet"
+    header_text = f"{status_emoji} {job['title']} — {job['company']} | {match_label} ({job['score']}) | Track {job['track']} | {job['status'].upper()}"
+    with st.expander(header_text):
+        col_a,col_b,col_c = st.columns(3)
+        with col_a:
+            st.markdown(f"**Company:** {job['company']}")
+            st.markdown(f"**Location:** {job['location']}")
+        with col_b:
+            st.markdown(f"**Track:** {'🇮🇳 India-Based' if job['track']=='A' else '🇪🇺 Europe Direct'}")
+            st.markdown(
+                f"**Sponsorship:** {'🟢 Yes' if str(job['sponsorship']).lower().startswith('y') else '⚪️ No'}"
+            )
+        with col_c:
+            st.markdown(f"**Score:** {job['score']}")
+            st.markdown(
+                f"**Source:** {'🌐 LinkedIn' if str(job['source']).lower()=='linkedin' else str(job['source'])}"
+            )
+        if job['description']:
+            st.markdown(f"**Description:** {job['description'][:300]}...")
+        if job['url']:
+            st.markdown(f"[🔗 View Job]({job['url']})")
+        cx, cy, cz, cw, c5 = st.columns(5)
+        with cx:
+            if st.button("✅ Approve", key=f"ap_{job['id']}"):
+                update_job_status(job['id'], 'approved')
+                st.rerun()
+        with cy:
+            if st.button("❌ Reject", key=f"rj_{job['id']}"):
+                update_job_status(job['id'], 'rejected')
+                st.rerun()
+        with cz:
+            if st.button("📋 Applied", key=f"done_{job['id']}"):
+                update_job_status(job['id'], 'applied')
+                st.rerun()
+        with cw:
+            if st.button("📄 Generate CV", key=f"cv_{job['id']}"):
+                with st.spinner(f"Generating CV..."):
+                    from engines.cv_engine import generate_application_package
+                    import engines.gemini_engine as gemini_engine
+                    profile = json.load(open('profile.json'))
+                    cv_path, cl_path, folder, error = generate_application_package(job, profile, gemini_engine)
+                    if error:
+                        st.error(f"Error: {error}")
+                    else:
+                        update_job_status(job['id'], 'approved')
+                        st.success(f"✅ CV ready!")
+                        st.markdown(f"📁 `{folder}`")
+        with c5:
+            if st.button("🚀 Auto Apply", key=f"auto_{job['id']}"):
+                if not job.get("url"):
+                    st.warning("⚠️ This job has no LinkedIn URL saved.")
+                else:
+                    profile = json.load(open("profile.json"))
+                    from engines.cv_engine import generate_application_package
+                    import engines.gemini_engine as gemini_engine
+                    with st.spinner("Preparing tailored CV and cover letter..."):
+                        cv_path, cl_path, folder, error = generate_application_package(
+                            job, profile, gemini_engine
+                        )
+                    if error or not cv_path:
+                        st.error(f"Error preparing CV: {error or 'no CV generated'}")
+                    else:
+                        st.success(f"✅ Application package ready: {folder}")
+                        st.info("🌐 Opening LinkedIn... Click the GREEN submit button!")
+                        from engines.apply_agent import launch_apply
+                        success, message = launch_apply(dict(job), cv_path, profile)
+                        if success:
+                            st.success("✅ Browser opening... Check your screen!")
+                            update_job_status(job["id"], "applied")
+                        else:
+                            st.warning(f"ℹ️ {message}")
+        st.markdown("---")
+        action_left, action_right = st.columns(2)
+        with action_left:
+            st.markdown("**📧 Email Application**")
+            if st.button("🔍 Find Email", key=f"femail_{job['id']}"):
+                from engines.email_engine import extract_email_from_jd, find_company_email
+                from groq import Groq
+                groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+                email = extract_email_from_jd(job['description'])
+                if not email:
+                    with st.spinner("Searching for company email..."):
+                        email = find_company_email(job['company'], groq_client)
+                if email:
+                    st.session_state[f"email_{job['id']}"] = email
+                    st.success(f"📧 Found: {email}")
+                else:
+                    st.session_state[f"email_{job['id']}"] = ""
+                    st.warning("No email found — enter manually")
+        with action_right:
+            st.markdown("**🤝 LinkedIn Outreach**")
+            if st.button("🔍 Find Contact", key=f"find_{job['id']}"):
+                with st.spinner("Searching LinkedIn..."):
+                    try:
+                        from engines.outreach_agent import find_company_contact
+                        contacts = find_company_contact(job.get('company') or "")
+                        if contacts:
+                            st.session_state[f"contacts_{job['id']}"] = contacts
+                            st.success(f"Found {len(contacts)} contact(s)!")
+                        else:
+                            st.warning("No contacts found")
+                    except Exception as e:
+                        st.error(f"Error searching LinkedIn contacts: {e}")
+        if f"email_{job['id']}" in st.session_state:
+            to_email = st.text_input("Recipient email:", value=st.session_state[f"email_{job['id']}"], key=f"emailinput_{job['id']}")
+            if st.button("📧 Send Application", key=f"sendemail_{job['id']}"):
+                safe_company = job['company'].replace(' ','_')[:30]
+                safe_role = job['title'].replace(' ','_')[:25]
+                folder = f"applications/{safe_company}_{safe_role}_{date.today().strftime('%d%b%Y')}"
+                cv_files = [f for f in os.listdir(folder) if f.endswith('.pdf') and 'CV_' in f] if os.path.exists(folder) else []
+                cl_files = [f for f in os.listdir(folder) if f.endswith('.pdf') and 'Cover' in f] if os.path.exists(folder) else []
+                if not cv_files:
+                    st.warning("⚠️ Generate CV first!")
+                else:
+                    cv_path = f"{folder}/{cv_files[0]}"
+                    cl_path = f"{folder}/{cl_files[0]}" if cl_files else None
+                    from engines.email_engine import send_application_email, build_email_subject, build_email_body
+                    from engines.gemini_engine import generate_cover_letter
+                    profile = json.load(open('profile.json'))
+                    with st.spinner("Sending email..."):
+                        cl_text = generate_cover_letter(job['company'], job['title'], job['description'], profile)
+                        subject = build_email_subject(job, profile)
+                        body = build_email_body(job, profile, cl_text)
+                        success, message = send_application_email(to_email, subject, body, cv_path, cl_path)
+                        if success:
+                            update_job_status(job['id'], 'applied')
+                            st.success(f"✅ Application sent to {to_email}!")
+                        else:
+                            st.error(f"❌ {message}")
+        if f"contacts_{job['id']}" in st.session_state:
+            contacts = st.session_state[f"contacts_{job['id']}"]
+            labels = [f"{c['name']} — {c['role']}" for c in contacts]
+            sel = st.selectbox("Select contact:", labels, key=f"sel_{job['id']}")
+            contact = contacts[labels.index(sel)]
+            st.markdown(f"**Selected contact:** {contact['name']} — {contact['role']}")
+            st.caption(contact['company'])
+            st.markdown(f"[Open LinkedIn profile]({contact['url']})")
+            if st.button("✍️ Generate Message", key=f"genmsg_{job['id']}"):
+                from engines.outreach_agent import generate_outreach_message
+                from groq import Groq
+                from dotenv import load_dotenv
+                load_dotenv()
+                groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+                profile = json.load(open('profile.json'))
+                msg = generate_outreach_message(contact['name'], job['company'], job['title'], profile, groq_client)
+                st.session_state[f"msg_{job['id']}"] = msg
+            if f"msg_{job['id']}" in st.session_state:
+                edited = st.text_area("Review and edit your message (max 280):", value=st.session_state[f"msg_{job['id']}"], max_chars=280, key=f"edit_{job['id']}")
+                st.caption(f"{len(edited)}/280 characters")
+                if st.button("🚀 Send Request", key=f"send_{job['id']}"):
+                    from engines.outreach_agent import save_outreach
+                    import subprocess, tempfile, json as jmod
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        jmod.dump({'url': contact['url'], 'message': edited}, f)
+                        tmp = f.name
+                    subprocess.Popen(['python3', '-c', f'import json; from engines.outreach_agent import send_connection_request; d=json.load(open("{tmp}")); send_connection_request(d["url"],d["message"])'])
+                    save_outreach(job['id'], job['company'], contact['name'], contact['role'], contact['url'], edited)
+                    st.success(f"✅ Browser opening to connect with {contact['name']}!")
+
+st.markdown("""<style> 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* Base Styles & Minimalist Background */
+html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
 
 [data-testid="stAppViewContainer"] {
-    background: linear-gradient(-45deg, #09090e, #130f24, #0d1b2a, #110517);
-    background-size: 400% 400%;
-    animation: gradientBG 15s ease infinite;
-    color: #f0f0f5;
+    background: radial-gradient(circle at 0% 0%, rgba(191, 219, 254, 0.8) 0, transparent 55%),
+                radial-gradient(circle at 100% 100%, rgba(224, 242, 254, 0.9) 0, transparent 60%),
+                #F9FAFB;
+    color: #0F172A;
 }
 
-@keyframes gradientBG {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-/* Sidebar Styling */
+/* Sidebar Styling - Clean Panel */
 [data-testid="stSidebar"] {
-    background: rgba(10, 5, 20, 0.4) !important;
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 5px 0 30px rgba(0,0,0,0.5);
+    background: #FFFFFF !important;
+    border-right: 1px solid #E5E7EB !important;
 }
-[data-testid="stSidebar"] * { color: #e0e0ea !important; }
+[data-testid="stSidebar"] * { color: #475569 !important; }
 [data-testid="stSidebarNav"] { padding-top: 2rem; }
 
 /* Header / Top Nav */
 [data-testid="stHeader"] { background-color: transparent !important; }
 
-/* Metric Cards with Glowing Border Effect */
+/* Global Typography & Legibility */
+h1 {
+    font-size: 2.5rem !important;
+    font-weight: 700 !important;
+    color: #0F172A !important;
+    letter-spacing: -0.05em;
+    margin-bottom: 24px !important;
+}
+h2, h3 { font-weight: 600 !important; color: #111827 !important; letter-spacing: -0.02em; }
+p, label, li { color: #4B5563 !important; line-height: 1.6; font-size: 0.95rem; }
+strong { color: #0F172A !important; font-weight: 600; }
+
+/* Metric Cards - Sharp Vercel-like Aesthetic */
 .metric-card {
-    position: relative;
-    background: rgba(20, 20, 35, 0.4);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 20px;
+    background: linear-gradient(145deg, #FFFFFF, #E0F2FE);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 18px;
     padding: 24px;
     text-align: center;
-    box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    overflow: hidden;
-    animation: fadeUp 0.8s ease-out forwards;
+    transition: all 0.2s ease;
+    margin-bottom: 18px;
+    box-shadow:
+        14px 14px 32px rgba(148, 163, 184, 0.45),
+        -10px -10px 24px rgba(255, 255, 255, 0.95),
+        inset 0 0 0 1px rgba(248, 250, 252, 0.9);
 }
-
-.metric-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: -100%; width: 50%; height: 100%;
-    background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
-    transform: skewX(-20deg);
-    transition: 0.5s;
-}
-.metric-card:hover::before { left: 150%; }
 
 .metric-card:hover {
-    transform: translateY(-8px) scale(1.02);
-    border-color: rgba(0, 255, 204, 0.4);
-    box-shadow: 0 15px 50px -10px rgba(0, 255, 204, 0.2);
+    border-color: rgba(37, 99, 235, 0.9);
+    transform: translateY(-2px);
+    box-shadow:
+        18px 20px 40px rgba(148, 163, 184, 0.6),
+        -12px -12px 28px rgba(255, 255, 255, 1),
+        inset 0 0 0 1px rgba(219, 234, 254, 1);
 }
 
 .metric-value {
-    font-size: 3.5em;
+    font-size: 3rem;
     font-weight: 700;
-    background: linear-gradient(135deg, #00FFCC 0%, #00BFFF 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
+    color: #0F172A;
+    letter-spacing: -0.05em;
+    line-height: 1;
 }
 
 .metric-label {
-    font-size: 1.1em;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #64748B;
+    margin-top: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.job-card {
+    background: linear-gradient(145deg, #FFFFFF, #E0F2FE);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 18px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    box-shadow:
+        12px 14px 30px rgba(148, 163, 184, 0.45),
+        -10px -10px 24px rgba(255, 255, 255, 0.98),
+        inset 0 0 0 1px rgba(248, 250, 252, 0.9);
+    cursor: pointer;
+}
+
+.job-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.job-card-title {
     font-weight: 600;
-    color: #94a3b8;
-    margin-top: 10px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
+    color: #0F172A;
 }
 
-/* Animations */
-@keyframes fadeUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
+.job-card-score {
+    font-weight: 600;
+    color: #1D4ED8;
 }
 
-/* Buttons */
+.job-card-company {
+    font-size: 0.9rem;
+    color: #475569;
+    margin-bottom: 4px;
+}
+
+.job-card-meta {
+    font-size: 0.8rem;
+    color: #6B7280;
+}
+
+.job-card-tag {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #1D4ED8;
+}
+
+/* Minimalist Primary Buttons */
 .stButton>button {
-    background: linear-gradient(45deg, #FF3366, #FF9933) !important;
-    background-size: 200% auto !important;
-    color: white !important;
-    border: none;
-    border-radius: 14px;
-    font-weight: 700;
-    padding: 0.8rem 1.5rem;
-    font-size: 1.1em;
-    letter-spacing: 1px;
-    transition: all 0.4s ease;
-    box-shadow: 0 8px 25px rgba(255, 51, 102, 0.3);
-    text-transform: uppercase;
+    background: linear-gradient(135deg, #BFDBFE, #60A5FA);
+    color: #0F172A !important;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    border-radius: 999px;
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.9rem;
+    transition: all 0.18s ease-out;
     width: 100%;
+    box-shadow:
+        10px 12px 26px rgba(148, 163, 184, 0.55),
+        -8px -8px 22px rgba(255, 255, 255, 0.95),
+        inset 0 0 0 1px rgba(248, 250, 252, 0.7);
 }
 
 .stButton>button:hover {
-    background-position: right center !important;
-    transform: translateY(-3px) scale(1.01);
-    box-shadow: 0 12px 30px rgba(255, 51, 102, 0.5);
+    transform: translateY(-2px) scale(1.01);
+    box-shadow:
+        14px 16px 34px rgba(148, 163, 184, 0.7),
+        -10px -10px 26px rgba(255, 255, 255, 1),
+        inset 0 0 0 1px rgba(219, 234, 254, 1);
 }
 
-.stButton>button:active { transform: translateY(1px); }
+.stButton>button:active { 
+    transform: translateY(0) scale(0.99);
+    background: linear-gradient(135deg, #93C5FD, #3B82F6);
+}
 
-/* Expanders */
+/* Secondary Actions / Expanders */
 [data-testid="stExpander"] {
-    background: rgba(30, 30, 50, 0.3) !important;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
-    border-radius: 16px !important;
+    background: linear-gradient(145deg, #FFFFFF, #E0F2FE) !important;
+    border: 1px solid rgba(148, 163, 184, 0.4) !important;
+    border-radius: 18px !important;
     overflow: hidden !important;
-    transition: all 0.3s ease;
     margin-bottom: 1rem;
+    transition: all 0.2s ease;
+    box-shadow:
+        12px 14px 30px rgba(148, 163, 184, 0.5),
+        -10px -10px 24px rgba(255, 255, 255, 0.98),
+        inset 0 0 0 1px rgba(248, 250, 252, 0.9);
 }
 [data-testid="stExpander"]:hover {
-    border-color: rgba(255, 255, 255, 0.15) !important;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    border-color: rgba(37, 99, 235, 0.9) !important;
 }
 [data-testid="stExpander"] summary {
     padding: 1rem !important;
-    font-size: 1.1em;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #0F172A !important;
 }
 
-/* Typography */
-h1 {
-    font-size: 3rem !important;
-    font-weight: 700 !important;
-    background: linear-gradient(to right, #ffffff, #a5b4fc);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: -1px;
-    margin-bottom: 20px !important;
-}
+/* Minimal Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
-h2, h3 { font-weight: 600 !important; color: #e2e8f0 !important; letter-spacing: -0.5px; }
-p, label { color: #cbd5e1 !important; line-height: 1.6; }
-
-/* Custom Scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
-
-/* DataFrame Styling */
+/* DataFrame Styling - Clean Lines, High Contrast Borders */
 [data-testid="stDataFrame"] {
-    border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 16px;
-    overflow: hidden;
-    background: rgba(20, 20, 35, 0.4);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 18px;
+    background: linear-gradient(145deg, #FFFFFF, #E5F0FF);
+    box-shadow:
+        14px 16px 34px rgba(148, 163, 184, 0.5),
+        -10px -10px 24px rgba(255, 255, 255, 0.98),
+        inset 0 0 0 1px rgba(248, 250, 252, 0.95);
 }
-hr { border-color: rgba(255, 255, 255, 0.05) !important; margin: 2rem 0 !important; }
+[data-testid="stDataFrame"] table {
+    width: 100% !important;
+}
+
+/* Clean Divider */
+hr { 
+    border: none !important; 
+    border-top: 1px solid #E5E7EB !important;
+    margin: 2rem 0 !important; 
+}
+
+/* Input Fields & Dropdowns - Sharp and Clean */
+input, select, textarea {
+    background: linear-gradient(145deg, #FFFFFF, #E5F0FF) !important;
+    border: 1px solid rgba(148, 163, 184, 0.55) !important;
+    border-radius: 16px !important;
+    padding: 10px 14px !important;
+    color: #0F172A !important;
+    font-size: 0.95rem !important;
+    font-weight: 400 !important;
+    width: 100% !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    box-shadow:
+        10px 12px 26px rgba(148, 163, 184, 0.5),
+        -8px -8px 22px rgba(255, 255, 255, 0.98),
+        inset 0 0 0 1px rgba(248, 250, 252, 0.95);
+}
+input:focus, select:focus, textarea:focus {
+    outline: none !important;
+    border-color: rgba(37, 99, 235, 0.9) !important;
+    box-shadow:
+        14px 16px 34px rgba(148, 163, 184, 0.65),
+        -10px -10px 26px rgba(255, 255, 255, 1),
+        inset 0 0 0 1px rgba(219, 234, 254, 1) !important;
+    transform: translateY(-1px);
+}
 </style>""", unsafe_allow_html=True) 
  
 init_db() 
-page = st.sidebar.radio("🎯 Job Hunt Assistant", ["🏠 Home","💼 Jobs","📋 Applications","📁 CV Vault","🎤 Interview Prep","⚙️ Settings"])
+page = st.sidebar.radio(
+    "🎯 Job Hunt Assistant",
+    ["🏠 Home", "💼 Jobs", "📋 Applications", "📣 Outreach", "📈 Insights", "📁 CV Vault", "🎤 Interview Prep", "⚙️ Settings"],
+)
 
 
 if page == "🏠 Home": 
     st.title("Welcome back, Danish! 👋") 
     st.caption(f"Today is {datetime.now().strftime('%A, %d %B %Y')}") 
+    if "show_custom_search" not in st.session_state: 
+        st.session_state["show_custom_search"] = False 
+    st.markdown("---") 
+    st.subheader("🔍 Job Search") 
+    top_cs_col, _ = st.columns([1, 3]) 
+    with top_cs_col: 
+        if st.button("🔍 Custom Search", key="custom_search_toggle"): 
+            st.session_state["show_custom_search"] = not st.session_state["show_custom_search"] 
+
+    with st.expander("⚙️ Search Settings", expanded=st.session_state["show_custom_search"]): 
+        col1, col2 = st.columns(2) 
+        with col1: 
+            custom_role = st.text_input("Job Title / Role", placeholder="e.g. Head of Talent Acquisition") 
+            custom_location = st.text_input("Location", placeholder="e.g. Spain, Europe, India") 
+            track = st.selectbox("Track", ["A - India Based (EU-facing)", "B - Europe Direct", "Both"]) 
+        with col2: 
+            min_score_filter = st.slider("Minimum Score to Save", 0, 100, 50) 
+            max_results = st.selectbox("Max Results", [25, 50, 100, 200], index=1) 
+            seniority = st.multiselect("Seniority Level", 
+                ["Director", "Head", "VP", "Senior Manager", "Manager", "Associate Director", "Lead"], 
+                default=["Director", "Head", "VP", "Senior Manager", "Associate Director"] 
+            ) 
+        
+        keywords_extra = st.text_input("Additional Keywords (comma separated)", 
+            placeholder="e.g. RPO, pharma, EMEA") 
+        sources = st.multiselect(
+            "Job Sources",
+            ["LinkedIn", "Google Jobs (Naukri/Indeed/All sites)"],
+            default=["LinkedIn", "Google Jobs (Naukri/Indeed/All sites)"],
+        ) 
+
+    col_a, col_b, col_c = st.columns(3) 
+    with col_a: 
+        if st.button("▶ Run Custom Search"): 
+            with st.spinner("Searching LinkedIn..."): 
+                from scrapers.scraper_linkedin import scrape_linkedin_custom 
+                profile = json.load(open('profile.json')) 
+                extra_kw = [k.strip() for k in keywords_extra.split(',') if k.strip()] 
+                track_val = "A" if "A" in track else ("B" if "B" in track else "both") 
+                count = scrape_linkedin_custom( 
+                    role=custom_role or None, 
+                    location=custom_location or None, 
+                    track=track_val, 
+                    seniority_filters=seniority, 
+                    extra_keywords=extra_kw, 
+                    max_results=max_results 
+                ) 
+                st.success(f"✅ Found {count} new jobs!") 
+                st.rerun() 
+
+    with col_b: 
+        if st.button("▶ Run Default Search"): 
+            with st.spinner("Running default searches..."): 
+                from scrapers.scraper_linkedin import scrape_linkedin 
+                count = scrape_linkedin() 
+                st.success(f"✅ Found {count} jobs!") 
+                st.rerun() 
+
+    with col_c: 
+        if st.button("🧠 Score Unscored Jobs"): 
+            with st.spinner("Scoring with Groq..."): 
+                from engines.gemini_engine import score_job 
+                profile = json.load(open('profile.json')) 
+                jobs = get_all_jobs() 
+                unscored = [j for j in jobs if j['score'] == 0] 
+                scored = 0 
+                for job in unscored[:20]: 
+                    result = score_job(job['description'], profile) 
+                    update_job_score(job['id'], result['score'], result['reason']) 
+                    scored += 1 
+                st.success(f"✅ Scored {scored} jobs!") 
+                st.rerun() 
+
     st.markdown("---") 
     stats = get_stats() 
     c1,c2,c3,c4 = st.columns(4) 
@@ -190,52 +503,51 @@ if page == "🏠 Home":
     with c4: 
         st.markdown(f'<div class="metric-card"><div class="metric-value">{stats["interviews_scheduled"]}</div><div class="metric-label">🎤 Interviews Scheduled</div></div>',unsafe_allow_html=True) 
     st.markdown("---") 
-    col1,col2 = st.columns(2) 
-    with col1: 
-        st.subheader("📊 Recent Applications") 
-        jobs = get_all_jobs() 
-        applied = [j for j in jobs if j['status']=='applied'] 
-        if applied: 
-            df = pd.DataFrame(applied)[['company','title','track','status','date_applied','score']] 
-            df.columns = ['Company','Role','Track','Status','Date Applied','Score'] 
-            st.dataframe(df,use_container_width=True,hide_index=True) 
-        else: 
-            st.info("No applications yet. Find jobs in the 💼 Jobs tab!") 
-    with col2: 
-        st.subheader("🔥 Top Matches Today") 
-        jobs = get_all_jobs() 
-        top = sorted([j for j in jobs if j['score']>0],key=lambda x:x['score'],reverse=True)[:5] 
-        if top: 
-            for j in top: 
-                st.markdown(f"**{j['title']}** — {j['company']}") 
-                st.caption(f"Score: {j['score']} | {j['location']} | Track {j['track']}") 
-                st.markdown("---") 
-        else: 
-            st.info("Run scorer to see top matches here once jobs are scraped and scored.") 
+    st.subheader("📊 Recent Applications") 
+    jobs = get_all_jobs() 
+    applied = [j for j in jobs if j['status']=='applied'] 
+    if applied: 
+        df = pd.DataFrame(applied)[['company','title','track','status','date_applied','score']] 
+        df.columns = ['Company','Role','Track','Status','Date Applied','Score'] 
+        st.dataframe(df,use_container_width=True,hide_index=True) 
+    else: 
+        st.info("No applications yet. Find jobs in the 💼 Jobs tab!") 
     st.markdown("---") 
-    col_a,col_b = st.columns(2) 
-    with col_a: 
-        if st.button("▶ Run LinkedIn Scraper"): 
-            with st.spinner("Scraping LinkedIn jobs..."): 
-                from scrapers.scraper_linkedin import scrape_linkedin 
-                count = scrape_linkedin() 
-                st.success(f"✅ Found {count} new jobs!") 
-                st.rerun() 
-    with col_b: 
-        if st.button("🧠 Score Unscored Jobs"): 
-            with st.spinner("Scoring with Gemini..."): 
-                from engines.gemini_engine import score_job 
-                profile = json.load(open('profile.json')) 
-                jobs = get_all_jobs() 
-                unscored = [j for j in jobs if j['score']==0] 
-                scored = 0 
-                for job in unscored[:20]: 
-                    result = score_job(job['description'],profile) 
-                    update_job_score(job['id'],result['score'],result['reason']) 
-                    scored += 1 
-                st.success(f"✅ Scored {scored} jobs!") 
-                st.rerun()
-
+    st.subheader("🔥 Top Matches Today") 
+    jobs = get_all_jobs() 
+    top = sorted([j for j in jobs if j['score']>0],key=lambda x:x['score'],reverse=True)[:5] 
+    if top: 
+        for j in top: 
+            if j['score'] >= 80: 
+                match_label = "🔥 High match" 
+            elif j['score'] >= 60: 
+                match_label = "👍 Good match" 
+            elif j['score'] > 0: 
+                match_label = "👌 Light match" 
+            else: 
+                match_label = "No score yet" 
+            card_html = f""" 
+            <div class="job-card"> 
+                <div class="job-card-header"> 
+                    <div class="job-card-title">{j['title']}</div> 
+                    <div class="job-card-score">{j['score']}</div> 
+                </div> 
+                <div class="job-card-company">{j['company']}</div> 
+                <div class="job-card-meta">{j['location']} • Track {j['track']}</div> 
+                <div class="job-card-tag">{match_label}</div> 
+            </div> 
+            """ 
+            st.markdown(card_html, unsafe_allow_html=True) 
+            btn_col_1, btn_col_2 = st.columns([1, 2]) 
+            with btn_col_1: 
+                if j.get('url'): 
+                    st.markdown(f"[🔗 View direct on LinkedIn]({j['url']})") 
+                else: 
+                    st.caption("No LinkedIn link available") 
+            with btn_col_2: 
+                render_job_body(j) 
+    else: 
+        st.info("Run scorer to see top matches here once jobs are scraped and scored.") 
 elif page == "💼 Jobs": 
     st.title("💼 Job Listings") 
     st.markdown("---") 
@@ -270,173 +582,7 @@ elif page == "💼 Jobs":
         else: 
             st.caption(f"Showing all {len(filtered)} jobs (no filters active)") 
         for job in filtered[:50]: 
-            status_emoji = {'new': '🔵', 'approved': '🟢', 'rejected': '🔴', 'applied': '✅', 'interview': '🎤'}.get(job['status'], '🔵') 
-            if job['score'] >= 80: 
-                match_label = "🔥 High match" 
-            elif job['score'] >= 60: 
-                match_label = "👍 Good match" 
-            elif job['score'] > 0: 
-                match_label = "👌 Light match" 
-            else: 
-                match_label = "No score yet" 
-            header_text = f"{status_emoji} {job['title']} — {job['company']} | {match_label} ({job['score']}) | Track {job['track']} | {job['status'].upper()}" 
-            with st.expander(header_text): 
-                col_a,col_b,col_c = st.columns(3) 
-                with col_a: 
-                    st.markdown(f"**Company:** {job['company']}") 
-                    st.markdown(f"**Location:** {job['location']}") 
-                with col_b: 
-                    st.markdown(f"**Track:** {'🇮🇳 India-Based' if job['track']=='A' else '🇪🇺 Europe Direct'}") 
-                    st.markdown( 
-                        f"**Sponsorship:** {'🟢 Yes' if str(job['sponsorship']).lower().startswith('y') else '⚪️ No'}" 
-                    ) 
-                with col_c: 
-                    st.markdown(f"**Score:** {job['score']}") 
-                    st.markdown(
-                        f"**Source:** {'🌐 LinkedIn' if str(job['source']).lower()=='linkedin' else str(job['source'])}"
-                    ) 
-                if job['description']: 
-                    st.markdown(f"**Description:** {job['description'][:300]}...") 
-                if job['url']: 
-                    st.markdown(f"[🔗 View Job]({job['url']})") 
-                cx, cy, cz, cw, c5 = st.columns(5) 
-                with cx: 
-                    if st.button("✅ Approve", key=f"ap_{job['id']}"): 
-                        update_job_status(job['id'], 'approved') 
-                        st.rerun() 
-                with cy: 
-                    if st.button("❌ Reject", key=f"rj_{job['id']}"): 
-                        update_job_status(job['id'], 'rejected') 
-                        st.rerun() 
-                with cz: 
-                    if st.button("📋 Applied", key=f"done_{job['id']}"): 
-                        update_job_status(job['id'], 'applied') 
-                        st.rerun() 
-                with cw: 
-                    if st.button("📄 Generate CV", key=f"cv_{job['id']}"): 
-                        with st.spinner(f"Generating CV..."): 
-                            from engines.cv_engine import generate_application_package 
-                            import engines.gemini_engine as gemini_engine 
-                            profile = json.load(open('profile.json')) 
-                            cv_path, cl_path, folder, error = generate_application_package(job, profile, gemini_engine) 
-                            if error: 
-                                st.error(f"Error: {error}") 
-                            else: 
-                                update_job_status(job['id'], 'approved') 
-                                st.success(f"✅ CV ready!") 
-                                st.markdown(f"📁 `{folder}`") 
-                with c5: 
-                    if st.button("🚀 Auto Apply", key=f"auto_{job['id']}"): 
-                        safe_company = job['company'].replace(' ','_')[:30] 
-                        safe_role = job['title'].replace(' ','_')[:25] 
-                        folder = f"applications/{safe_company}_{safe_role}_{date.today().strftime('%d%b%Y')}" 
-                        cv_files = [] 
-                        if os.path.exists(folder): 
-                            cv_files = [f for f in os.listdir(folder) if f.endswith('.pdf') and 'CV_' in f] 
-                        if not cv_files: 
-                            st.warning("⚠️ Generate CV first!") 
-                        else: 
-                            cv_path = f"{folder}/{cv_files[0]}" 
-                            profile = json.load(open('profile.json')) 
-                            st.info("🌐 Opening LinkedIn... Click the GREEN submit button!") 
-                            from engines.apply_agent import launch_apply 
-                            success, message = launch_apply(dict(job), cv_path, profile) 
-                            if success: 
-                                st.success("✅ Browser opening... Check your screen!") 
-                                update_job_status(job['id'], 'applied') 
-                            else: 
-                                st.warning(f"ℹ️ {message}") 
-
-                st.markdown("---") 
-                st.markdown("---") 
-                st.markdown("**📧 Email Application**") 
-                e1, e2 = st.columns(2) 
-                with e1: 
-                    if st.button("🔍 Find Email", key=f"femail_{job['id']}"): 
-                        from engines.email_engine import extract_email_from_jd, find_company_email 
-                        from groq import Groq 
-                        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY")) 
-                        email = extract_email_from_jd(job['description']) 
-                        if not email: 
-                            with st.spinner("Searching for company email..."): 
-                                email = find_company_email(job['company'], groq_client) 
-                        if email: 
-                            st.session_state[f"email_{job['id']}"] = email 
-                            st.success(f"📧 Found: {email}") 
-                        else: 
-                            st.session_state[f"email_{job['id']}"] = "" 
-                            st.warning("No email found — enter manually") 
- 
-                if f"email_{job['id']}" in st.session_state: 
-                    to_email = st.text_input("Recipient email:", value=st.session_state[f"email_{job['id']}"], key=f"emailinput_{job['id']}") 
-                    if st.button("📧 Send Application", key=f"sendemail_{job['id']}"): 
-                        safe_company = job['company'].replace(' ','_')[:30] 
-                        safe_role = job['title'].replace(' ','_')[:25] 
-                        folder = f"applications/{safe_company}_{safe_role}_{date.today().strftime('%d%b%Y')}" 
-                        cv_files = [f for f in os.listdir(folder) if f.endswith('.pdf') and 'CV_' in f] if os.path.exists(folder) else [] 
-                        cl_files = [f for f in os.listdir(folder) if f.endswith('.pdf') and 'Cover' in f] if os.path.exists(folder) else [] 
-                        if not cv_files: 
-                            st.warning("⚠️ Generate CV first!") 
-                        else: 
-                            cv_path = f"{folder}/{cv_files[0]}" 
-                            cl_path = f"{folder}/{cl_files[0]}" if cl_files else None 
-                            from engines.email_engine import send_application_email, build_email_subject, build_email_body 
-                            from engines.gemini_engine import generate_cover_letter 
-                            profile = json.load(open('profile.json')) 
-                            with st.spinner("Sending email..."): 
-                                cl_text = generate_cover_letter(job['company'], job['title'], job['description'], profile) 
-                                subject = build_email_subject(job, profile) 
-                                body = build_email_body(job, profile, cl_text) 
-                                success, message = send_application_email(to_email, subject, body, cv_path, cl_path) 
-                                if success: 
-                                    update_job_status(job['id'], 'applied') 
-                                    st.success(f"✅ Application sent to {to_email}!") 
-                                else: 
-                                    st.error(f"❌ {message}") 
- 
-                st.markdown("**🤝 LinkedIn Outreach**") 
-                st.caption("Find a warm human contact and send a tailored connection request.") 
-                c_a, c_b = st.columns(2) 
-                with c_a: 
-                    if st.button("🔍 Find Contact", key=f"find_{job['id']}"): 
-                        with st.spinner("Searching LinkedIn..."): 
-                            from engines.outreach_agent import find_company_contact 
-                            contacts = find_company_contact(job['company']) 
-                            if contacts: 
-                                st.session_state[f"contacts_{job['id']}"] = contacts 
-                                st.success(f"Found {len(contacts)} contact(s)!") 
-                            else: 
-                                st.warning("No contacts found") 
-
-                if f"contacts_{job['id']}" in st.session_state: 
-                    contacts = st.session_state[f"contacts_{job['id']}"] 
-                    labels = [f"{c['name']} — {c['role']}" for c in contacts] 
-                    sel = st.selectbox("Select contact:", labels, key=f"sel_{job['id']}") 
-                    contact = contacts[labels.index(sel)] 
-                    st.markdown(f"**Selected contact:** {contact['name']} — {contact['role']}") 
-                    st.caption(contact['company']) 
-                    st.markdown(f"[Open LinkedIn profile]({contact['url']})") 
-                    if st.button("✍️ Generate Message", key=f"genmsg_{job['id']}"): 
-                        from engines.outreach_agent import generate_outreach_message 
-                        from groq import Groq 
-                        from dotenv import load_dotenv 
-                        load_dotenv() 
-                        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY")) 
-                        profile = json.load(open('profile.json')) 
-                        msg = generate_outreach_message(contact['name'], job['company'], job['title'], profile, groq_client) 
-                        st.session_state[f"msg_{job['id']}"] = msg 
-                    if f"msg_{job['id']}" in st.session_state: 
-                        edited = st.text_area("Review and edit your message (max 280):", value=st.session_state[f"msg_{job['id']}"], max_chars=280, key=f"edit_{job['id']}") 
-                        st.caption(f"{len(edited)}/280 characters") 
-                        if st.button("🚀 Send Request", key=f"send_{job['id']}"): 
-                            from engines.outreach_agent import save_outreach 
-                            import subprocess, tempfile, json as jmod 
-                            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f: 
-                                jmod.dump({'url': contact['url'], 'message': edited}, f) 
-                                tmp = f.name 
-                            subprocess.Popen(['python3', '-c', f'import json; from engines.outreach_agent import send_connection_request; d=json.load(open("{tmp}")); send_connection_request(d["url"],d["message"])']) 
-                            save_outreach(job['id'], job['company'], contact['name'], contact['role'], contact['url'], edited) 
-                            st.success(f"✅ Browser opening to connect with {contact['name']}!") 
+            render_job_body(job) 
 
 elif page == "📋 Applications": 
     st.title("📋 Applications Tracker") 
@@ -466,6 +612,144 @@ elif page == "📋 Applications":
             status_map = {'applied': '✅ Applied', 'interview': '🎤 Interview', 'offer': '🏆 Offer'} 
             df_view['Status'] = df_view['Status'].map(lambda s: status_map.get(s, s)) 
             st.dataframe(df_view,use_container_width=True,hide_index=True) 
+
+elif page == "📣 Outreach":
+    st.title("📣 Outreach")
+    st.markdown("---")
+    col_top_left, col_top_right = st.columns([2,1])
+    with col_top_left:
+        st.subheader("Daily hiring manager targets")
+    with col_top_right:
+        generate_clicked = st.button("🎯 Generate today’s 10 hiring managers")
+    if generate_clicked:
+        jobs = get_all_jobs()
+        jobs = [j for j in jobs if j.get("score", 0) >= 70]
+        jobs = sorted(jobs, key=lambda j: j.get("score", 0), reverse=True)[:6]
+        if not jobs:
+            st.warning("No high-match jobs available to generate targets.")
+        else:
+            profile = json.load(open("profile.json"))
+            target_roles = profile.get("target_roles") or []
+            from engines.outreach_agent import find_hiring_managers
+            rows = []
+            today = date.today().isoformat()
+            for job in jobs:
+                role_hint = job.get("title") or (target_roles[0] if target_roles else "")
+                company = job.get("company") or ""
+                if not company or not role_hint:
+                    continue
+                contacts = find_hiring_managers(company, role_hint)
+                for c in contacts:
+                    rows.append(
+                        {
+                            "company": c["company"],
+                            "role": job.get("title") or role_hint,
+                            "source_role": c.get("source_role") or role_hint,
+                            "contact_name": c["contact_name"],
+                            "contact_title": c["contact_title"],
+                            "linkedin_url": c["linkedin_url"],
+                            "status": "new",
+                            "message_sent": 0,
+                            "created_at": today,
+                            "updated_at": today,
+                            "job_id": job.get("id"),
+                        }
+                    )
+                    if len(rows) >= 10:
+                        break
+                if len(rows) >= 10:
+                    break
+            if rows:
+                insert_hiring_targets(rows)
+                st.success(f"Added {len(rows)} hiring manager targets for today.")
+            else:
+                st.warning("No suitable hiring managers found right now.")
+    st.markdown("---")
+    new_targets = get_hiring_targets_by_status("new")
+    pending_targets = get_hiring_targets_by_status("pending")
+    connected_targets = get_hiring_targets_by_status("connected")
+    st.subheader("New targets")
+    if not new_targets:
+        st.caption("No new hiring manager targets yet. Click the button above to generate today’s list.")
+    else:
+        for t in new_targets:
+            with st.expander(f"{t['contact_name']} — {t['contact_title']} at {t['company']}"):
+                st.markdown(f"[Open LinkedIn profile]({t['linkedin_url']})")
+                st.caption(f"Matched to role: {t['role']}")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    if st.button("✅ Connection sent", key=f"hm_sent_{t['id']}"):
+                        update_hiring_target_status(t["id"], "pending")
+                        st.rerun()
+                with col_b:
+                    if st.button("Skip", key=f"hm_skip_{t['id']}"):
+                        update_hiring_target_status(t["id"], "skipped")
+                        st.rerun()
+    st.markdown("---")
+    st.subheader("Pending connections")
+    if not pending_targets:
+        st.caption("No pending connection requests.")
+    else:
+        for t in pending_targets:
+            cols = st.columns([3, 2, 2])
+            with cols[0]:
+                st.markdown(f"{t['contact_name']} — {t['contact_title']} at {t['company']}")
+            with cols[1]:
+                st.markdown(f"[Profile]({t['linkedin_url']})")
+            with cols[2]:
+                if st.button("✔️ Connection accepted", key=f"hm_accept_{t['id']}"):
+                    update_hiring_target_status(t["id"], "connected")
+                    st.rerun()
+    st.markdown("---")
+    st.subheader("Connections")
+    if not connected_targets:
+        st.caption("No connected hiring managers tracked yet.")
+    else:
+        for t in connected_targets:
+            col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+            with col1:
+                st.markdown(f"{t['contact_name']} — {t['contact_title']} at {t['company']}")
+            with col2:
+                st.markdown(f"[Profile]({t['linkedin_url']})")
+            with col3:
+                sent_key = f"hm_msg_{t['id']}"
+                current = bool(t.get("message_sent"))
+                new_val = st.checkbox("Message sent", value=current, key=sent_key)
+            with col4:
+                if bool(t.get("message_sent")) != new_val:
+                    update_hiring_target_message_flag(t["id"], new_val)
+
+elif page == "📈 Insights":
+    st.title("📈 Insights")
+    st.markdown("---")
+    jobs = get_all_jobs()
+    if not jobs:
+        st.info("No jobs in the database yet. Run a search from Home first.")
+    else:
+        df = pd.DataFrame(jobs)
+        total_jobs = len(df)
+        applied_count = (df["status"] == "applied").sum()
+        interview_count = (df["status"] == "interview").sum()
+        offer_count = (df["status"] == "offer").sum()
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Jobs tracked", total_jobs)
+        with col2:
+            st.metric("Applied", applied_count)
+        with col3:
+            st.metric("Interviews", interview_count)
+        with col4:
+            st.metric("Offers", offer_count)
+        st.markdown("---")
+        if "score" in df.columns:
+            track_scores = df[df["score"] > 0].groupby("track")["score"].mean().reset_index()
+            track_scores["track"] = track_scores["track"].map({"A": "Track A (India-based)", "B": "Track B (Europe)"})
+            st.subheader("Average score by track")
+            st.bar_chart(track_scores.set_index("track"))
+        status_counts = df["status"].value_counts().reset_index()
+        status_counts.columns = ["status", "count"]
+        st.subheader("Jobs by status")
+        st.bar_chart(status_counts.set_index("status"))
 
 elif page == "📁 CV Vault": 
     st.title("📁 CV Vault") 
