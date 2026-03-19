@@ -30,22 +30,6 @@ def init_db():
         )
     """)
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS hiring_targets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            company TEXT,
-            role TEXT,
-            source_role TEXT,
-            contact_name TEXT,
-            contact_title TEXT,
-            linkedin_url TEXT UNIQUE,
-            status TEXT DEFAULT 'new',
-            message_sent INTEGER DEFAULT 0,
-            created_at TEXT,
-            updated_at TEXT,
-            job_id INTEGER
-        )
-    """)
-    conn.execute("""
         CREATE TABLE IF NOT EXISTS applications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_id INTEGER,
@@ -64,6 +48,51 @@ def init_db():
             FOREIGN KEY (job_id) REFERENCES jobs(id)
         )
     """)
+    conn.commit()
+    conn.close()
+    create_hiring_targets_table()
+
+
+def create_hiring_targets_table():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS hiring_targets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER,
+            company TEXT,
+            role TEXT,
+            source_role TEXT,
+            contact_name TEXT,
+            contact_title TEXT,
+            contact_role TEXT,
+            linkedin_url TEXT UNIQUE,
+            status TEXT DEFAULT 'new',
+            message_sent INTEGER DEFAULT 0,
+            date_added TEXT,
+            notes TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    """)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(hiring_targets)").fetchall()}
+    for name, col_type in [
+        ("job_id", "INTEGER"),
+        ("company", "TEXT"),
+        ("role", "TEXT"),
+        ("source_role", "TEXT"),
+        ("contact_name", "TEXT"),
+        ("contact_title", "TEXT"),
+        ("contact_role", "TEXT"),
+        ("linkedin_url", "TEXT"),
+        ("status", "TEXT"),
+        ("message_sent", "INTEGER"),
+        ("date_added", "TEXT"),
+        ("notes", "TEXT"),
+        ("created_at", "TEXT"),
+        ("updated_at", "TEXT"),
+    ]:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE hiring_targets ADD COLUMN {name} {col_type}")
     conn.commit()
     conn.close()
 
@@ -132,31 +161,48 @@ def update_job_score(job_id, score, reason):
     conn.close()
 
 def insert_hiring_targets(rows):
-    if not rows:
-        return
     conn = sqlite3.connect(DB_PATH)
-    try:
-        conn.executemany(
-            """
-            INSERT OR IGNORE INTO hiring_targets
-            (company, role, source_role, contact_name, contact_title, linkedin_url, status, message_sent, created_at, updated_at, job_id)
-            VALUES (:company, :role, :source_role, :contact_name, :contact_title, :linkedin_url, :status, :message_sent, :created_at, :updated_at, :job_id)
-            """,
-            rows,
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    inserted = 0
+    for row in rows:
+        try:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO hiring_targets 
+                (job_id, company, contact_name, contact_title, contact_role, 
+                linkedin_url, status, date_added, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, 'new', ?, ?)
+                """,
+                (
+                    row.get("job_id", 0),
+                    row.get("company", ""),
+                    row.get("contact_name", ""),
+                    row.get("contact_role", ""),
+                    row.get("contact_role", ""),
+                    row.get("linkedin_url", ""),
+                    date.today().isoformat(),
+                    date.today().isoformat(),
+                ),
+            )
+            if conn.execute("SELECT changes()").fetchone()[0] > 0:
+                inserted += 1
+        except Exception as e:
+            print(f"Insert error: {e}")
+    conn.commit()
+    conn.close()
+    print(f"Inserted {inserted} new hiring targets")
+    return inserted
+
 
 def get_hiring_targets_by_status(status):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT * FROM hiring_targets WHERE status=? ORDER BY created_at DESC, id DESC",
+        "SELECT * FROM hiring_targets WHERE status=? ORDER BY date_added DESC, id DESC",
         (status,),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
 
 def update_hiring_target_status(target_id, status):
     conn = sqlite3.connect(DB_PATH)
@@ -168,7 +214,8 @@ def update_hiring_target_status(target_id, status):
     conn.commit()
     conn.close()
 
-def update_hiring_target_message_flag(target_id, sent):
+
+def update_hiring_target_message_flag(target_id, sent=1):
     conn = sqlite3.connect(DB_PATH)
     now = datetime.utcnow().isoformat()
     conn.execute(

@@ -18,7 +18,17 @@ def render_job_body(job):
         match_label = "👌 Light match"
     else:
         match_label = "No score yet"
-    header_text = f"{status_emoji} {job['title']} — {job['company']} | {match_label} ({job['score']}) | Track {job['track']} | {job['status'].upper()}"
+    source_raw = str(job.get('source') or '')
+    src_lower = source_raw.lower()
+    if 'linkedin' in src_lower:
+        source_label = "LinkedIn"
+    elif 'google' in src_lower:
+        source_label = "Google Jobs"
+    elif source_raw:
+        source_label = source_raw
+    else:
+        source_label = "Unknown"
+    header_text = f"{status_emoji} {job['title']} — {job['company']} | {match_label} ({job['score']}) | Src: {source_label} | Track {job['track']} | {job['status'].upper()}"
     with st.expander(header_text):
         col_a,col_b,col_c = st.columns(3)
         with col_a:
@@ -411,8 +421,8 @@ input:focus, select:focus, textarea:focus {
 init_db() 
 page = st.sidebar.radio(
     "🎯 Job Hunt Assistant",
-    ["🏠 Home", "💼 Jobs", "📋 Applications", "📣 Outreach", "📈 Insights", "📁 CV Vault", "🎤 Interview Prep", "⚙️ Settings"],
-)
+    ["🏠 Home","💼 Jobs","📋 Applications","📁 CV Vault","🎤 Interview Prep","📣 Outreach","⚙️ Settings"],
+) 
 
 
 if page == "🏠 Home": 
@@ -449,30 +459,57 @@ if page == "🏠 Home":
             default=["LinkedIn", "Google Jobs (Naukri/Indeed/All sites)"],
         ) 
 
-    col_a, col_b, col_c = st.columns(3) 
+    col_a, col_b, col_c, col_d = st.columns(4) 
     with col_a: 
         if st.button("▶ Run Custom Search"): 
-            with st.spinner("Searching LinkedIn..."): 
-                from scrapers.scraper_linkedin import scrape_linkedin_custom 
+            before_jobs = get_all_jobs() 
+            before_ids = {j["id"] for j in before_jobs} 
+            with st.spinner("Searching all sources..."): 
                 profile = json.load(open('profile.json')) 
                 extra_kw = [k.strip() for k in keywords_extra.split(',') if k.strip()] 
                 track_val = "A" if "A" in track else ("B" if "B" in track else "both") 
-                count = scrape_linkedin_custom( 
-                    role=custom_role or None, 
-                    location=custom_location or None, 
-                    track=track_val, 
-                    seniority_filters=seniority, 
-                    extra_keywords=extra_kw, 
-                    max_results=max_results 
-                ) 
-                st.success(f"✅ Found {count} new jobs!") 
+                total = 0 
+
+                if "LinkedIn" in sources: 
+                    from scrapers.scraper_linkedin import scrape_linkedin_custom 
+                    count = scrape_linkedin_custom( 
+                        role=custom_role or None, 
+                        location=custom_location or None, 
+                        track=track_val, 
+                        seniority_filters=seniority, 
+                        extra_keywords=extra_kw, 
+                        max_results=max_results 
+                    ) 
+                    total += count 
+                    st.info(f"LinkedIn: {count} jobs") 
+
+                if "Google Jobs (Naukri/Indeed/All sites)" in sources: 
+                    import scrapers.scraper_google_jobs as gj 
+                    if not getattr(gj, "SERPAPI_KEY", None): 
+                        st.warning("Google Jobs search not configured — SERPAPI_KEY missing in .env") 
+                    else: 
+                        query = custom_role or "talent acquisition manager" 
+                        location = custom_location or "Europe" 
+                        count = gj.scrape_custom_google_jobs(query, location, track_val, extra_kw) 
+                        total += count 
+                        st.info(f"Google Jobs: {count} jobs") 
+
+                after_jobs = get_all_jobs() 
+                new_ids = [j["id"] for j in after_jobs if j["id"] not in before_ids] 
+                st.session_state["latest_search_job_ids"] = new_ids 
+                st.success(f"✅ Total: {total} new jobs found!") 
                 st.rerun() 
 
     with col_b: 
         if st.button("▶ Run Default Search"): 
+            before_jobs = get_all_jobs() 
+            before_ids = {j["id"] for j in before_jobs} 
             with st.spinner("Running default searches..."): 
                 from scrapers.scraper_linkedin import scrape_linkedin 
                 count = scrape_linkedin() 
+                after_jobs = get_all_jobs() 
+                new_ids = [j["id"] for j in after_jobs if j["id"] not in before_ids] 
+                st.session_state["latest_search_job_ids"] = new_ids 
                 st.success(f"✅ Found {count} jobs!") 
                 st.rerun() 
 
@@ -490,6 +527,32 @@ if page == "🏠 Home":
                     scored += 1 
                 st.success(f"✅ Scored {scored} jobs!") 
                 st.rerun() 
+    with col_d: 
+        if st.button("🌐 Google Jobs Search"): 
+            before_jobs = get_all_jobs() 
+            before_ids = {j["id"] for j in before_jobs} 
+            with st.spinner("Searching Google Jobs..."): 
+                import scrapers.scraper_google_jobs as gj 
+                if not getattr(gj, "SERPAPI_KEY", None): 
+                    st.warning("Google Jobs search not configured — SERPAPI_KEY missing in .env") 
+                    count = 0 
+                else: 
+                    count = gj.scrape_all_google_jobs() 
+                after_jobs = get_all_jobs() 
+                new_ids = [j["id"] for j in after_jobs if j["id"] not in before_ids] 
+                st.session_state["latest_search_job_ids"] = new_ids 
+                st.success(f"✅ {count} jobs from Google Jobs!") 
+                st.rerun() 
+
+    if "latest_search_job_ids" in st.session_state and st.session_state["latest_search_job_ids"]: 
+        st.markdown("---") 
+        st.subheader("🆕 Jobs from your last search") 
+        all_jobs = get_all_jobs() 
+        latest_ids = set(st.session_state["latest_search_job_ids"]) 
+        latest_jobs = [j for j in all_jobs if j["id"] in latest_ids] 
+        st.caption(f"Showing {len(latest_jobs)} jobs from the last search") 
+        for job in latest_jobs[:100]: 
+            render_job_body(job) 
 
     st.markdown("---") 
     stats = get_stats() 
@@ -555,17 +618,29 @@ elif page == "💼 Jobs":
     if not jobs: 
         st.warning("No jobs found yet. Go to Home and run the scraper first.") 
     else: 
+        latest_ids = set(st.session_state.get("latest_search_job_ids", []) or []) 
+        view_mode = st.radio("Jobs to show", ["All jobs", "Only from last search"], horizontal=True) 
         c1,c2,c3 = st.columns(3) 
         with c1: 
-            track_filter = st.selectbox("Track",["All","A - India Based","B - Europe Direct"]) 
+            track_filter = st.selectbox("Track",["All","A - India Based","B - Europe Direct","India - All India jobs"]) 
         with c2: 
             status_filter = st.selectbox("Status",["All","new","approved","rejected","applied"]) 
         with c3: 
             min_score = st.slider("Min Score",0,100,0) 
-        filtered = jobs 
+        base_jobs = jobs 
+        if view_mode == "Only from last search": 
+            if latest_ids: 
+                base_jobs = [j for j in base_jobs if j["id"] in latest_ids] 
+            else: 
+                base_jobs = [] 
+        filtered = base_jobs 
         if track_filter != "All": 
-            tv = "A" if "A" in track_filter else "B" 
-            filtered = [j for j in filtered if j['track']==tv] 
+            if track_filter == "A - India Based": 
+                filtered = [j for j in filtered if j["track"] == "A"] 
+            elif track_filter == "B - Europe Direct": 
+                filtered = [j for j in filtered if j["track"] == "B"] 
+            elif track_filter == "India - All India jobs": 
+                filtered = [j for j in filtered if "india" in str(j.get("location","")).lower()] 
         if status_filter != "All": 
             filtered = [j for j in filtered if j['status']==status_filter] 
         if min_score > 0: 
@@ -578,9 +653,11 @@ elif page == "💼 Jobs":
         if min_score > 0: 
             active_filters.append(f"Score ≥ {min_score}") 
         if active_filters: 
-            st.caption(f"Showing {len(filtered)} of {len(jobs)} jobs | " + " • ".join(active_filters)) 
+            prefix = "Last search" if view_mode == "Only from last search" else "All jobs" 
+            st.caption(f"{prefix}: showing {len(filtered)} of {len(base_jobs)} jobs | " + " • ".join(active_filters)) 
         else: 
-            st.caption(f"Showing all {len(filtered)} jobs (no filters active)") 
+            prefix = "Last search" if view_mode == "Only from last search" else "All jobs" 
+            st.caption(f"{prefix}: showing all {len(filtered)} jobs (no filters active)") 
         for job in filtered[:50]: 
             render_job_body(job) 
 
@@ -613,111 +690,167 @@ elif page == "📋 Applications":
             df_view['Status'] = df_view['Status'].map(lambda s: status_map.get(s, s)) 
             st.dataframe(df_view,use_container_width=True,hide_index=True) 
 
+
 elif page == "📣 Outreach":
-    st.title("📣 Outreach")
+    st.title("📣 LinkedIn Outreach")
     st.markdown("---")
-    col_top_left, col_top_right = st.columns([2,1])
-    with col_top_left:
-        st.subheader("Daily hiring manager targets")
-    with col_top_right:
-        generate_clicked = st.button("🎯 Generate today’s 10 hiring managers")
-    if generate_clicked:
-        jobs = get_all_jobs()
-        jobs = [j for j in jobs if j.get("score", 0) >= 70]
-        jobs = sorted(jobs, key=lambda j: j.get("score", 0), reverse=True)[:6]
-        if not jobs:
-            st.warning("No high-match jobs available to generate targets.")
-        else:
-            profile = json.load(open("profile.json"))
-            target_roles = profile.get("target_roles") or []
-            from engines.outreach_agent import find_hiring_managers
-            rows = []
-            today = date.today().isoformat()
-            for job in jobs:
-                role_hint = job.get("title") or (target_roles[0] if target_roles else "")
-                company = job.get("company") or ""
-                if not company or not role_hint:
-                    continue
-                contacts = find_hiring_managers(company, role_hint)
-                for c in contacts:
-                    rows.append(
-                        {
-                            "company": c["company"],
-                            "role": job.get("title") or role_hint,
-                            "source_role": c.get("source_role") or role_hint,
-                            "contact_name": c["contact_name"],
-                            "contact_title": c["contact_title"],
-                            "linkedin_url": c["linkedin_url"],
-                            "status": "new",
-                            "message_sent": 0,
-                            "created_at": today,
-                            "updated_at": today,
-                            "job_id": job.get("id"),
-                        }
-                    )
-                    if len(rows) >= 10:
+    from engines.database import (
+        get_hiring_targets_by_status,
+        insert_hiring_targets,
+        update_hiring_target_status,
+        update_hiring_target_message_flag,
+        create_hiring_targets_table,
+    )
+    create_hiring_targets_table()
+
+    if st.button("🎯 Generate Today's Hiring Manager Targets"):
+        with st.spinner("Searching LinkedIn for relevant hiring managers..."):
+            try:
+                from engines.outreach_agent import find_hiring_managers
+                from engines.database import get_all_jobs
+                import json as jmod
+
+                profile = jmod.load(open("profile.json"))
+                jobs = get_all_jobs()
+                top_jobs = sorted(
+                    [j for j in jobs if j["score"] >= 70],
+                    key=lambda x: x["score"],
+                    reverse=True,
+                )[:6]
+
+                search_targets = []
+                if top_jobs:
+                    for job in top_jobs:
+                        search_targets.append(
+                            (job["company"], job["title"], job.get("id", 0))
+                        )
+                    st.info(f"Using {len(top_jobs)} top-scored jobs")
+                else:
+                    st.info("No scored jobs found — using profile targets")
+                    for role in profile.get("target_roles", [])[:3]:
+                        for market in profile.get("target_markets", [])[:2]:
+                            search_targets.append((market, role, 0))
+
+                all_rows = []
+                errors_all = []
+                for company, role, job_id in search_targets[:5]:
+                    st.write(f"🔍 Searching: {company} — {role}")
+                    contacts, errors = find_hiring_managers(company, role, max_results=2)
+                    errors_all.extend(errors)
+                    for c in contacts:
+                        c["job_id"] = job_id
+                        c["date_added"] = date.today().isoformat()
+                        all_rows.append(c)
+                    if len(all_rows) >= 10:
                         break
-                if len(rows) >= 10:
-                    break
-            if rows:
-                insert_hiring_targets(rows)
-                st.success(f"Added {len(rows)} hiring manager targets for today.")
-            else:
-                st.warning("No suitable hiring managers found right now.")
+
+                if all_rows:
+                    inserted = insert_hiring_targets(all_rows)
+                    st.success(
+                        f"✅ Found {len(all_rows)} hiring managers! {inserted} new added."
+                    )
+                else:
+                    st.warning("No suitable hiring managers found.")
+                    if errors_all:
+                        st.error("Errors: " + " | ".join(errors_all[:3]))
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+
     st.markdown("---")
+
+    st.subheader("🆕 New Targets")
     new_targets = get_hiring_targets_by_status("new")
-    pending_targets = get_hiring_targets_by_status("pending")
-    connected_targets = get_hiring_targets_by_status("connected")
-    st.subheader("New targets")
     if not new_targets:
-        st.caption("No new hiring manager targets yet. Click the button above to generate today’s list.")
-    else:
-        for t in new_targets:
-            with st.expander(f"{t['contact_name']} — {t['contact_title']} at {t['company']}"):
-                st.markdown(f"[Open LinkedIn profile]({t['linkedin_url']})")
-                st.caption(f"Matched to role: {t['role']}")
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    if st.button("✅ Connection sent", key=f"hm_sent_{t['id']}"):
+        st.info("No new hiring manager targets yet. Click Generate above.")
+    for t in new_targets:
+        with st.expander(
+            f"👤 {t['contact_name']} — {t.get('contact_role') or t.get('contact_title') or ''} at {t['company']}"
+        ):
+            st.markdown(f"[View LinkedIn Profile]({t['linkedin_url']})")
+            profile = json.load(open("profile.json"))
+            if st.button("✍️ Generate Message", key=f"gm_{t['id']}"):
+                from dotenv import load_dotenv
+                load_dotenv()
+                from engines.outreach_agent import generate_outreach_message
+                from groq import Groq
+
+                groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+                msg = generate_outreach_message(
+                    t["contact_name"],
+                    t["company"],
+                    t.get("contact_role") or t.get("contact_title") or "",
+                    profile,
+                    groq_client,
+                )
+                st.session_state[f"omsg_{t['id']}"] = msg
+            if f"omsg_{t['id']}" in st.session_state:
+                edited = st.text_area(
+                    "Message (max 280):",
+                    value=st.session_state[f"omsg_{t['id']}"],
+                    max_chars=280,
+                    key=f"oedit_{t['id']}",
+                )
+                st.caption(f"{len(edited)}/280 characters")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🚀 Send Request", key=f"osr_{t['id']}"):
+                        import subprocess
+                        import tempfile
+                        import json as jmod
+
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix=".json", delete=False
+                        ) as f:
+                            jmod.dump(
+                                {"url": t["linkedin_url"], "message": edited}, f
+                            )
+                            tmp = f.name
+                        subprocess.Popen(
+                            [
+                                "python3",
+                                "-c",
+                                "import json; from engines.outreach_agent import send_connection_request; d=json.load(open(%r)); send_connection_request(d['url'], d['message'])"
+                                % tmp,
+                            ]
+                        )
                         update_hiring_target_status(t["id"], "pending")
+                        st.success("✅ Request sent! Marked as pending.")
                         st.rerun()
-                with col_b:
-                    if st.button("Skip", key=f"hm_skip_{t['id']}"):
+                with col2:
+                    if st.button("⏭️ Skip", key=f"skip_{t['id']}"):
                         update_hiring_target_status(t["id"], "skipped")
                         st.rerun()
+
     st.markdown("---")
-    st.subheader("Pending connections")
-    if not pending_targets:
-        st.caption("No pending connection requests.")
-    else:
-        for t in pending_targets:
-            cols = st.columns([3, 2, 2])
-            with cols[0]:
-                st.markdown(f"{t['contact_name']} — {t['contact_title']} at {t['company']}")
-            with cols[1]:
-                st.markdown(f"[Profile]({t['linkedin_url']})")
-            with cols[2]:
-                if st.button("✔️ Connection accepted", key=f"hm_accept_{t['id']}"):
-                    update_hiring_target_status(t["id"], "connected")
+
+    st.subheader("⏳ Pending Connections")
+    pending = get_hiring_targets_by_status("pending")
+    if not pending:
+        st.info("No pending connection requests.")
+    for t in pending:
+        with st.expander(f"⏳ {t['contact_name']} — {t['company']}"):
+            st.markdown(f"[View Profile]({t['linkedin_url']})")
+            if st.button("✅ Connection Accepted", key=f"acc_{t['id']}"):
+                update_hiring_target_status(t["id"], "connected")
+                st.rerun()
+
+    st.markdown("---")
+
+    st.subheader("🤝 Connected")
+    connected = get_hiring_targets_by_status("connected")
+    if not connected:
+        st.info("No connected hiring managers tracked yet.")
+    for t in connected:
+        with st.expander(f"🤝 {t['contact_name']} — {t['company']}"):
+            st.markdown(f"[View Profile]({t['linkedin_url']})")
+            sent = t.get("message_sent", 0)
+            if not sent:
+                if st.button("📨 Mark Message Sent", key=f"ms_{t['id']}"):
+                    update_hiring_target_message_flag(t["id"], 1)
                     st.rerun()
-    st.markdown("---")
-    st.subheader("Connections")
-    if not connected_targets:
-        st.caption("No connected hiring managers tracked yet.")
-    else:
-        for t in connected_targets:
-            col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
-            with col1:
-                st.markdown(f"{t['contact_name']} — {t['contact_title']} at {t['company']}")
-            with col2:
-                st.markdown(f"[Profile]({t['linkedin_url']})")
-            with col3:
-                sent_key = f"hm_msg_{t['id']}"
-                current = bool(t.get("message_sent"))
-                new_val = st.checkbox("Message sent", value=current, key=sent_key)
-            with col4:
-                if bool(t.get("message_sent")) != new_val:
-                    update_hiring_target_message_flag(t["id"], new_val)
+            else:
+                st.success("✅ Message sent")
+
 
 elif page == "📈 Insights":
     st.title("📈 Insights")
